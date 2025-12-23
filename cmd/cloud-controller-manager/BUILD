@@ -19,6 +19,7 @@ go_library(
     name = "cloud-controller-manager_lib",
     srcs = [
         "gkenetworkparamsetcontroller.go",
+        "dynamicpodcontroller.go"
         "gkeservicecontroller.go",
         "main.go",
         "nodeipamcontroller.go",
@@ -31,6 +32,7 @@ go_library(
         "//pkg/controller/nodeipam/config",
         "//pkg/controller/nodeipam/ipam",
         "//pkg/controller/service",
+        "//pkg/controller/nodeipam/dynamicpod",
         "//providers/gce",
         "//vendor/github.com/GoogleCloudPlatform/gke-networking-api/client/network/clientset/versioned",
         "//vendor/github.com/GoogleCloudPlatform/gke-networking-api/client/network/informers/externalversions",

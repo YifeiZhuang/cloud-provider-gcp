@@ -104,6 +104,10 @@ func main() {
 		},
 		Constructor: startGkeServiceControllerWrapper,
 	}
+	
+	controllerInitializers["dynamic-pod"] = app.ControllerInitFuncConstructor{
+		Constructor: startDynamicPodIPControllerWrapper,
+	}
 
 	// add controllers disabled by default
 	app.ControllersDisabledByDefault.Insert("gkenetworkparamset")

@@ -962,3 +962,64 @@ func (g *Cloud) InstanceByProviderID(providerID string) (res *compute.Instance, 
 	}
 	return res, nil
 }
+
+
+// UpdateAliasToInstanceByProviderID to update the alias ranges of the instance.
+func (g *Cloud) UpdateAliasToInstanceByProviderID(providerID string, nicName string, aliases []*compute.AliasIpRange) error {
+	ctx, cancel := cloud.ContextWithCallTimeout()
+	defer cancel()
+
+	project, zone, name, err := splitProviderID(providerID)
+	if err != nil {
+		return err
+	}
+
+	var instance *computebeta.Instance
+	if g.projectFromNodeProviderID {
+		instance, err = g.c.BetaInstances().Get(ctx, meta.ZonalKey(canonicalizeInstanceName(name), zone), cloud.ForceProjectID(project))
+	} else {
+		instance, err = g.c.BetaInstances().Get(ctx, meta.ZonalKey(canonicalizeInstanceName(name), zone))
+	}
+	if err != nil {
+		return err
+	}
+
+	switch len(instance.NetworkInterfaces) {
+	case 0:
+		return fmt.Errorf("instance %q has no network interfaces", providerID)
+	case 1:
+	default:
+		klog.Warningf("Instance %q has more than one network interface, using only the first (%v)",
+			providerID, instance.NetworkInterfaces)
+	}
+
+	var targetIf *computebeta.NetworkInterface
+
+	for _, iface := range instance.NetworkInterfaces {
+		if iface.Name == nicName {
+			targetIf = iface
+			break
+	  }
+	}
+	if targetIf == nil {
+		return fmt.Errorf("Instance %s does not have network interface %s", providerID, nicName)
+	}
+	
+	iface := &computebeta.NetworkInterface{}
+	iface.Name = targetIf.Name
+	iface.Fingerprint = targetIf.Fingerprint
+	for _, a := range aliases {
+		iface.AliasIpRanges = append(iface.AliasIpRanges, &computebeta.AliasIpRange{
+			IpCidrRange:         a.IpCidrRange,
+			SubnetworkRangeName: a.SubnetworkRangeName,
+		})
+	}
+
+	mc := newInstancesMetricContext("upate_alias", zone)
+	if g.projectFromNodeProviderID {
+		err = g.c.BetaInstances().UpdateNetworkInterface(ctx, meta.ZonalKey(instance.Name, lastComponent(instance.Zone)), iface.Name, iface, cloud.ForceProjectID(project))
+	} else {
+		err = g.c.BetaInstances().UpdateNetworkInterface(ctx, meta.ZonalKey(instance.Name, lastComponent(instance.Zone)), iface.Name, iface)
+	}
+	return mc.Observe(err)
+}
