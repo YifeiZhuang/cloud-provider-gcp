@@ -19,7 +19,7 @@ go_library(
     name = "cloud-controller-manager_lib",
     srcs = [
         "gkenetworkparamsetcontroller.go",
-        "dynamicpodcontroller.go"
+        "dynamicpodcontroller.go",
         "gkeservicecontroller.go",
         "main.go",
         "nodeipamcontroller.go",

@@ -9,7 +9,7 @@ import (
 
 	"k8s.io/cloud-provider/app"
 	"k8s.io/klog/v2"
-	"k8s.io/cloud-provider-gcp/pkg/controller/dynamicpod"
+	"k8s.io/cloud-provider-gcp/pkg/controller/nodeipam/dynamicpod"
 	"k8s.io/cloud-provider-gcp/providers/gce"
 	"k8s.io/controller-manager/controller"
 )
