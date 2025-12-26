@@ -5,7 +5,7 @@ go_library(
     srcs = [
         "dynamic_pod_sync.go",
     ],
-    importpath = "k8s.io/cloud-provider-gcp/pkg/controller/dynamicpod",
+    importpath = "k8s.io/cloud-provider-gcp/pkg/controller/nodeipam/dynamicpod",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/controller/nodeipam/ipam",
