@@ -301,7 +301,11 @@ func startControllers(ctx context.Context, cloud cloudprovider.Interface, contro
 		informerUserCloud.SetInformers(c.SharedInformers)
 	}
 	var controllerChecks []healthz.HealthChecker
+	for _, printController := range c.ComponentConfig.Generic.Controllers {
+		klog.Infof("zivy listing generic config controllers: %q", printController)
+	} 
 	for controllerName, initFn := range controllers {
+		klog.Infof("[zivy] %q trying to start controller", controllerName)
 		if !genericcontrollermanager.IsControllerEnabled(controllerName, ControllersDisabledByDefault, c.ComponentConfig.Generic.Controllers) {
 			klog.Warningf("%q is disabled", controllerName)
 			continue

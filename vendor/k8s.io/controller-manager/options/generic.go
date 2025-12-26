@@ -91,7 +91,9 @@ func (o *GenericControllerManagerConfigurationOptions) ApplyTo(cfg *cmconfig.Gen
 
 	// copy controller names and replace aliases with canonical names
 	cfg.Controllers = make([]string, len(o.Controllers))
+	fmt.Printf("[zivy] applyTo config:%d ", len(o.Controllers))
 	for i, initialName := range o.Controllers {
+		fmt.Printf("o.controller: %s", initialName)
 		initialNameWithoutPrefix := strings.TrimPrefix(initialName, "-")
 		controllerName := initialNameWithoutPrefix
 		if canonicalName, ok := controllerAliases[controllerName]; ok {
@@ -101,6 +103,7 @@ func (o *GenericControllerManagerConfigurationOptions) ApplyTo(cfg *cmconfig.Gen
 			controllerName = fmt.Sprintf("-%s", controllerName)
 		}
 		cfg.Controllers[i] = controllerName
+		fmt.Printf("cfg controlelrs name %s", controllerName)
 	}
 
 	return nil
