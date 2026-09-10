@@ -28,6 +28,7 @@ import (
 	nncv1 "github.com/GoogleCloudPlatform/gke-networking-api/apis/nodenetworkconfig/v1"
 	nncfake "github.com/GoogleCloudPlatform/gke-networking-api/client/nodenetworkconfig/clientset/versioned/fake"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -67,50 +68,13 @@ func TestMetrics_Version(t *testing.T) {
 	}
 }
 
-func TestMetrics_AllMetricsRegistered(t *testing.T) {
-	metrics.MetisVersionGauge.WithLabelValues("v1.0.0", "abc", "2026-08-27T00:00:00Z").Set(1)
-	metrics.LocalStoreIPTotalGauge.WithLabelValues("default", "ipv4", "available").Set(10)
-	metrics.LocalStoreCIDRBlockTotalGauge.WithLabelValues("default", "ipv4", "ready").Set(1)
-	metrics.PendingDynamicRequestGauge.WithLabelValues("default").Set(0)
-	metrics.MonitorActionTotal.WithLabelValues("scale_up", "default").Inc()
-	metrics.GRPCServerHandledTotal.WithLabelValues("AllocatePodIP", "OK", "default", "c1", "p1").Inc()
-	metrics.OutgoingDynamicIPAllocRequestTotal.WithLabelValues("default", "c1", "p1").Inc()
-	metrics.RPCLatencySeconds.WithLabelValues("AllocatePodIP", "default", "c1", "p1").Observe(0.1)
-	metrics.DynamicIPAllocRPCLatencySeconds.WithLabelValues("default", "c1", "p1").Observe(0.5)
-	metrics.WatcherCIDROperationTotal.WithLabelValues("add", "default").Inc()
-
-	metricFamilies, err := prometheus.DefaultGatherer.Gather()
+func TestMetrics_PrometheusLint(t *testing.T) {
+	lintProblems, err := testutil.GatherAndLint(prometheus.DefaultGatherer)
 	if err != nil {
-		t.Fatalf("Failed to gather metrics: %v", err)
+		t.Fatalf("Failed to gather metrics for linting: %v", err)
 	}
-
-	expectedMetrics := []string{
-		"metis_version",
-		"metis_local_store_ips",
-		"metis_local_store_cidr_blocks",
-		"metis_daemon_pending_dynamic_requests",
-		"metis_daemon_monitor_action_total",
-		"metis_daemon_grpc_server_handled_total",
-		"metis_daemon_outgoing_dynamic_ip_alloc_request_total",
-		"metis_daemon_rpc_latency_seconds",
-		"metis_daemon_dynamic_ip_alloc_rpc_latency_seconds",
-		"metis_daemon_watcher_cidr_operation_total",
-	}
-
-	foundMetrics := map[string]bool{}
-	for _, mf := range metricFamilies {
-		name := mf.GetName()
-		for _, exp := range expectedMetrics {
-			if name == exp {
-				foundMetrics[exp] = true
-			}
-		}
-	}
-
-	for _, exp := range expectedMetrics {
-		if !foundMetrics[exp] {
-			t.Errorf("Expected metric %s not found in Prometheus gatherer", exp)
-		}
+	for _, problem := range lintProblems {
+		t.Errorf("Prometheus metric lint error: %v", problem)
 	}
 }
 
@@ -178,7 +142,7 @@ func TestDaemon_MetricsHTTPServer(t *testing.T) {
 	}
 }
 
-func TestPrometheusRecorder(t *testing.T) {
+func TestPrometheusRecorder(_ *testing.T) {
 	recorder := metrics.NewPrometheusRecorder()
 	recorder.RecordGRPCRequest("AllocatePodIP", "default", "c1", "p1", nil, 100*time.Millisecond)
 	recorder.RecordDynamicAllocation("default", "c1", "p1", 200*time.Millisecond)
@@ -187,7 +151,7 @@ func TestPrometheusRecorder(t *testing.T) {
 	recorder.RecordWatcherCIDROperation("add", "default")
 }
 
-func TestNoOpRecorder(t *testing.T) {
+func TestNoOpRecorder(_ *testing.T) {
 	recorder := metrics.NewNoOpRecorder()
 	recorder.RecordGRPCRequest("AllocatePodIP", "default", "c1", "p1", nil, 100*time.Millisecond)
 	recorder.RecordDynamicAllocation("default", "c1", "p1", 200*time.Millisecond)

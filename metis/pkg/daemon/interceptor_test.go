@@ -32,7 +32,7 @@ func TestMetricsUnaryInterceptor(t *testing.T) {
 	interceptor := metricsUnaryInterceptor(metrics.NewNoOpRecorder(), logr.Discard())
 
 	t.Run("nil request handling", func(t *testing.T) {
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(_ context.Context, _ any) (any, error) {
 			return nil, status.Error(codes.InvalidArgument, "request cannot be nil")
 		}
 		info := &grpc.UnaryServerInfo{FullMethod: "/adaptiveipam.v1.AdaptiveIpam/AllocatePodIP"}
@@ -43,7 +43,7 @@ func TestMetricsUnaryInterceptor(t *testing.T) {
 	})
 
 	t.Run("panicking handler recovery", func(t *testing.T) {
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		handler := func(_ context.Context, _ any) (any, error) {
 			panic("simulated handler panic")
 		}
 		info := &grpc.UnaryServerInfo{FullMethod: "/adaptiveipam.v1.AdaptiveIpam/AllocatePodIP"}

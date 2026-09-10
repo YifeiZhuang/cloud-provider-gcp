@@ -31,7 +31,7 @@ import (
 )
 
 func metricsUnaryInterceptor(recorder metrics.MetricsRecorder, logger logr.Logger) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		start := time.Now()
 		defer func() {
 			if r := recover(); r != nil {
@@ -49,7 +49,7 @@ func metricsUnaryInterceptor(recorder metrics.MetricsRecorder, logger logr.Logge
 	}
 }
 
-func extractReqMetadata(req interface{}) (network, containerID, podName string) {
+func extractReqMetadata(req any) (network, containerID, podName string) {
 	if req == nil {
 		return "", "", ""
 	}

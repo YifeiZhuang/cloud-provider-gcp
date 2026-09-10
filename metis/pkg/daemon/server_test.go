@@ -41,6 +41,32 @@ import (
 	"k8s.io/metis/pkg/store"
 )
 
+type testMetricsRecorder struct {
+	metrics.MetricsRecorder
+	mu           sync.Mutex
+	grpcRequests []grpcReqRecord
+}
+
+type grpcReqRecord struct {
+	method      string
+	network     string
+	containerID string
+	podName     string
+	err         error
+}
+
+func (r *testMetricsRecorder) RecordGRPCRequest(method, network, containerID, podName string, err error, _ time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.grpcRequests = append(r.grpcRequests, grpcReqRecord{
+		method:      method,
+		network:     network,
+		containerID: containerID,
+		podName:     podName,
+		err:         err,
+	})
+}
+
 func TestAdaptiveIpamServer_withGrpcClient(t *testing.T) {
 	logger := logr.Discard()
 	tempDir := t.TempDir()
@@ -53,7 +79,8 @@ func TestAdaptiveIpamServer_withGrpcClient(t *testing.T) {
 	}
 	defer s.Close()
 
-	server := newAdaptiveIpamServer(logger, s, sockPath, 0, 0, metrics.NewPrometheusRecorder())
+	rec := &testMetricsRecorder{MetricsRecorder: metrics.NewNoOpRecorder()}
+	server := newAdaptiveIpamServer(logger, s, sockPath, 0, 0, rec)
 
 	// 1. Start server in background
 	errCh := make(chan error, 1)
@@ -100,6 +127,17 @@ func TestAdaptiveIpamServer_withGrpcClient(t *testing.T) {
 
 	if resp.Ipv4 == nil || resp.Ipv4.IpAddress == "" {
 		t.Errorf("Expected valid IP address from gRPC client, got response: %v", resp)
+	}
+
+	// 4. Verify interceptor recorded metrics
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.grpcRequests) != 1 {
+		t.Fatalf("Expected 1 recorded gRPC request from interceptor, got %d", len(rec.grpcRequests))
+	}
+	got := rec.grpcRequests[0]
+	if got.method != "AllocatePodIP" || got.network != network || got.containerID != "test-container-integration" || got.podName != "test-pod" || got.err != nil {
+		t.Errorf("Unexpected recorded gRPC request from interceptor: %+v", got)
 	}
 }
 
