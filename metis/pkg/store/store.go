@@ -844,18 +844,27 @@ func (s *Store) MarkCIDRBlockAsDeletingForTest(ctx context.Context, id int64) er
 
 // IPUsage holds IP counts categorized by allocation state for a network.
 type IPUsage struct {
-	Allocated   int
-	Cooldown    int
-	Draining    int
-	Deleting    int
+	// Allocated is the count of IPs actively assigned to pods across all non-deleting CIDR blocks.
+	Allocated int
+	// Cooldown is the count of released IPs currently in their post-release cooldown period.
+	Cooldown int
+	// Draining is the count of unallocated, non-cooldown IPs residing inside CIDR blocks that are in Draining state.
+	Draining int
+	// Deleting is the total IP capacity of CIDR blocks marked as Deleting.
+	Deleting int
+	// ActiveTotal is the total IP capacity across active (Ready + Draining) CIDR blocks.
 	ActiveTotal int
-	Total       int
+	// Total is the total IP capacity across all provisioned CIDR blocks (ActiveTotal + Deleting).
+	Total int
 }
 
 // CIDRUsage holds CIDR block counts categorized by operational state for a network.
 type CIDRUsage struct {
-	Ready    int
+	// Ready is the count of CIDR blocks in Ready state available for IP allocation.
+	Ready int
+	// Draining is the count of CIDR blocks currently being drained of active pods.
 	Draining int
+	// Deleting is the count of CIDR blocks marked for deletion.
 	Deleting int
 }
 
@@ -870,27 +879,47 @@ func (s *Store) GetIPUsage(ctx context.Context, network string, ipFamily IPFamil
 	if ipFamily == IPv6 {
 		return s.getIPv6Usage(ctx, network)
 	}
+
 	var usage NetworkIPUsage
 	nowMilli := time.Now().UTC().UnixMilli()
+
 	err := s.db.QueryRowContext(ctx, `
+		WITH cb_stats AS (
+			SELECT
+				IFNULL(SUM(CASE WHEN state != ? THEN allocated_ips ELSE 0 END), 0) AS allocated,
+				IFNULL(SUM(CASE WHEN state = ? THEN (total_ips - allocated_ips) ELSE 0 END), 0) AS raw_draining_ips,
+				IFNULL(SUM(CASE WHEN state = ? THEN total_ips ELSE 0 END), 0) AS deleting_ips,
+				IFNULL(SUM(CASE WHEN state != ? THEN total_ips ELSE 0 END), 0) AS active_total_ips,
+				IFNULL(SUM(total_ips), 0) AS total_ips,
+				IFNULL(SUM(CASE WHEN state = ? THEN 1 ELSE 0 END), 0) AS ready_cidrs,
+				IFNULL(SUM(CASE WHEN state = ? THEN 1 ELSE 0 END), 0) AS draining_cidrs,
+				IFNULL(SUM(CASE WHEN state = ? THEN 1 ELSE 0 END), 0) AS deleting_cidrs
+			FROM cidr_blocks
+			WHERE network = ? AND ip_family = ?
+		),
+		ip_stats AS (
+			SELECT
+				COUNT(*) AS total_cooldown,
+				IFNULL(SUM(CASE WHEN cb.state = ? THEN 1 ELSE 0 END), 0) AS draining_cooldown
+			FROM ip_addresses i
+			JOIN cidr_blocks cb ON i.cidr_block_id = cb.id
+			WHERE cb.network = ? AND cb.ip_family = ? AND cb.state != ? AND i.is_allocated = FALSE AND i.release_at > ?
+		)
 		SELECT
-			IFNULL(SUM(CASE WHEN state != ? THEN allocated_ips ELSE 0 END), 0) AS allocated,
-			(
-				SELECT COUNT(i.id)
-				FROM ip_addresses i
-				JOIN cidr_blocks cb ON i.cidr_block_id = cb.id
-				WHERE cb.network = ? AND cb.ip_family = ? AND cb.state != ? AND i.is_allocated = FALSE AND i.release_at > ?
-			) AS cooldown,
-			IFNULL(SUM(CASE WHEN state = ? THEN total_ips ELSE 0 END), 0) AS draining_ips,
-			IFNULL(SUM(CASE WHEN state = ? THEN total_ips ELSE 0 END), 0) AS deleting_ips,
-			IFNULL(SUM(CASE WHEN state != ? THEN total_ips ELSE 0 END), 0) AS active_total_ips,
-			IFNULL(SUM(total_ips), 0) AS total_ips,
-			IFNULL(SUM(CASE WHEN state = ? THEN 1 ELSE 0 END), 0) AS ready_cidrs,
-			IFNULL(SUM(CASE WHEN state = ? THEN 1 ELSE 0 END), 0) AS draining_cidrs,
-			IFNULL(SUM(CASE WHEN state = ? THEN 1 ELSE 0 END), 0) AS deleting_cidrs
-		FROM cidr_blocks
-		WHERE network = ? AND ip_family = ?
-	`, StateDeleting, network, ipFamily, StateDeleting, nowMilli, StateDraining, StateDeleting, StateDeleting, StateReady, StateDraining, StateDeleting, network, ipFamily).Scan(
+			cb.allocated,
+			ip.total_cooldown,
+			MAX(0, cb.raw_draining_ips - ip.draining_cooldown) AS draining_ips,
+			cb.deleting_ips,
+			cb.active_total_ips,
+			cb.total_ips,
+			cb.ready_cidrs,
+			cb.draining_cidrs,
+			cb.deleting_cidrs
+		FROM cb_stats cb, ip_stats ip
+	`,
+		StateDeleting, StateDraining, StateDeleting, StateDeleting, StateReady, StateDraining, StateDeleting, network, ipFamily,
+		StateDraining, network, ipFamily, StateDeleting, nowMilli,
+	).Scan(
 		&usage.IPs.Allocated,
 		&usage.IPs.Cooldown,
 		&usage.IPs.Draining,
