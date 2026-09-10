@@ -49,15 +49,15 @@ type Watcher struct {
 	// syncHandler is the function called to sync a network work item. Decoupling this
 	// via a field function pointer allows unit tests to easily mock/override the sync
 	// logic without requiring full clients, informers, or stores.
-	syncHandler   func(ctx context.Context, network string) error
-	nncClient     nncclientset.Interface
-	nodeName      string
-	nncLister     nnclisters.NodeNetworkConfigLister
-	nncSynced     cache.InformerSynced
-	store         *store.Store
-	logger          logr.Logger
-	OnCIDRAdded     func(network string, availableIPs int)
-	recorder        metrics.MetricsRecorder
+	syncHandler func(ctx context.Context, network string) error
+	nncClient   nncclientset.Interface
+	nodeName    string
+	nncLister   nnclisters.NodeNetworkConfigLister
+	nncSynced   cache.InformerSynced
+	store       *store.Store
+	logger      logr.Logger
+	OnCIDRAdded func(network string, availableIPs int)
+	recorder    metrics.MetricsRecorder
 }
 
 // WatcherConfig holds the configuration for the Watcher.

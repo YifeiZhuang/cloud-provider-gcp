@@ -35,7 +35,7 @@ var (
 	// LocalStoreIPTotalGauge tracks IP address counts in local daemon stores by state type.
 	LocalStoreIPTotalGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "metis_local_store_ip_total",
+			Name: "metis_local_store_ips",
 			Help: "Count of IP addresses in local daemon stores categorized by type (available, allocated, cooldown, draining, deleting, total).",
 		},
 		[]string{"network", "ip_family", "type"},
@@ -44,7 +44,7 @@ var (
 	// LocalStoreCIDRBlockTotalGauge tracks CIDR block counts in local daemon stores by status.
 	LocalStoreCIDRBlockTotalGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "metis_local_store_cidr_block_total",
+			Name: "metis_local_store_cidr_blocks",
 			Help: "Total count of CIDR blocks in local daemon stores categorized by status (ready, draining, deleting).",
 		},
 		[]string{"network", "ip_family", "status"},
@@ -53,16 +53,16 @@ var (
 	// PendingDynamicRequestGauge tracks the number of pending IP allocation requests waiting for CIDR expansion.
 	PendingDynamicRequestGauge = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "metis_daemon_pending_dynamic_request_total",
+			Name: "metis_daemon_pending_dynamic_requests",
 			Help: "Number of pending IP allocation requests currently blocked and awaiting GCE allocation.",
 		},
 		[]string{"network"},
 	)
 
-	// MonitorActionCount tracks actions executed by the daemon monitor loop (scale_up, drain_excessive, release, delete).
-	MonitorActionCount = promauto.NewCounterVec(
+	// MonitorActionTotal tracks actions executed by the daemon monitor loop (scale_up, drain_excessive, release, delete).
+	MonitorActionTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "metis_daemon_monitor_action_count",
+			Name: "metis_daemon_monitor_action_total",
 			Help: "Total count of actions initiated by the daemon monitor loop (actions: scale_up, drain_excessive, release, delete).",
 		},
 		[]string{"action", "network"},
@@ -106,10 +106,10 @@ var (
 		[]string{"network", "container_id", "pod_name"},
 	)
 
-	// WatcherCIDROperationCount tracks successful CIDR watcher sync operations (add, delete).
-	WatcherCIDROperationCount = promauto.NewCounterVec(
+	// WatcherCIDROperationTotal tracks successful CIDR watcher sync operations (add, delete).
+	WatcherCIDROperationTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "metis_daemon_watcher_cidr_operation_count",
+			Name: "metis_daemon_watcher_cidr_operation_total",
 			Help: "Total count of CIDR watcher operations, categorized by operation type (add, delete).",
 		},
 		[]string{"operation", "network"},

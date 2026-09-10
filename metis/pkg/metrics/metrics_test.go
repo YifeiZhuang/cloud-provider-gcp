@@ -72,12 +72,12 @@ func TestMetrics_AllMetricsRegistered(t *testing.T) {
 	metrics.LocalStoreIPTotalGauge.WithLabelValues("default", "ipv4", "available").Set(10)
 	metrics.LocalStoreCIDRBlockTotalGauge.WithLabelValues("default", "ipv4", "ready").Set(1)
 	metrics.PendingDynamicRequestGauge.WithLabelValues("default").Set(0)
-	metrics.MonitorActionCount.WithLabelValues("scale_up", "default").Inc()
+	metrics.MonitorActionTotal.WithLabelValues("scale_up", "default").Inc()
 	metrics.GRPCServerHandledTotal.WithLabelValues("AllocatePodIP", "OK", "default", "c1", "p1").Inc()
 	metrics.OutgoingDynamicIPAllocRequestTotal.WithLabelValues("default", "c1", "p1").Inc()
 	metrics.RPCLatencySeconds.WithLabelValues("AllocatePodIP", "default", "c1", "p1").Observe(0.1)
 	metrics.DynamicIPAllocRPCLatencySeconds.WithLabelValues("default", "c1", "p1").Observe(0.5)
-	metrics.WatcherCIDROperationCount.WithLabelValues("add", "default").Inc()
+	metrics.WatcherCIDROperationTotal.WithLabelValues("add", "default").Inc()
 
 	metricFamilies, err := prometheus.DefaultGatherer.Gather()
 	if err != nil {
@@ -86,15 +86,15 @@ func TestMetrics_AllMetricsRegistered(t *testing.T) {
 
 	expectedMetrics := []string{
 		"metis_version",
-		"metis_local_store_ip_total",
-		"metis_local_store_cidr_block_total",
-		"metis_daemon_pending_dynamic_request_total",
-		"metis_daemon_monitor_action_count",
+		"metis_local_store_ips",
+		"metis_local_store_cidr_blocks",
+		"metis_daemon_pending_dynamic_requests",
+		"metis_daemon_monitor_action_total",
 		"metis_daemon_grpc_server_handled_total",
 		"metis_daemon_outgoing_dynamic_ip_alloc_request_total",
 		"metis_daemon_rpc_latency_seconds",
 		"metis_daemon_dynamic_ip_alloc_rpc_latency_seconds",
-		"metis_daemon_watcher_cidr_operation_count",
+		"metis_daemon_watcher_cidr_operation_total",
 	}
 
 	foundMetrics := map[string]bool{}

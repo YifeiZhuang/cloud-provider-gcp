@@ -60,24 +60,15 @@ func newAdaptiveIpamServer(logger logr.Logger, storeInstance *store.Store, socke
 }
 
 func (s *adaptiveIpamServer) AllocatePodIP(ctx context.Context, req *adaptiveipam.AllocatePodIPRequest) (*adaptiveipam.AllocatePodIPResponse, error) {
-	start := time.Now()
-	resp, err := s.engine.AllocatePodIP(ctx, req)
-	s.recorder.RecordGRPCRequest("AllocatePodIP", req.Network, getContainerIDFromAllocate(req), req.PodName, err, time.Since(start))
-	return resp, err
+	return s.engine.AllocatePodIP(ctx, req)
 }
 
 func (s *adaptiveIpamServer) DeallocatePodIP(ctx context.Context, req *adaptiveipam.DeallocatePodIPRequest) (*adaptiveipam.DeallocatePodIPResponse, error) {
-	start := time.Now()
-	resp, err := s.engine.DeallocatePodIP(ctx, req)
-	s.recorder.RecordGRPCRequest("DeallocatePodIP", req.Network, req.ContainerId, req.PodName, err, time.Since(start))
-	return resp, err
+	return s.engine.DeallocatePodIP(ctx, req)
 }
 
 func (s *adaptiveIpamServer) CheckPodIP(ctx context.Context, req *adaptiveipam.CheckPodIPRequest) (*adaptiveipam.CheckPodIPResponse, error) {
-	start := time.Now()
-	resp, err := s.engine.CheckPodIP(ctx, req)
-	s.recorder.RecordGRPCRequest("CheckPodIP", req.Network, req.ContainerId, req.PodName, err, time.Since(start))
-	return resp, err
+	return s.engine.CheckPodIP(ctx, req)
 }
 
 func getContainerIDFromAllocate(req *adaptiveipam.AllocatePodIPRequest) string {
@@ -123,7 +114,9 @@ func (s *adaptiveIpamServer) start() error {
 		return fmt.Errorf("failed to set permissions on socket %s: %w", sockPath, err)
 	}
 
-	s.grpcServer = grpc.NewServer()
+	s.grpcServer = grpc.NewServer(
+		grpc.UnaryInterceptor(metricsUnaryInterceptor(s.recorder, s.logger)),
+	)
 	adaptiveipam.RegisterAdaptiveIpamServer(s.grpcServer, s)
 	adminv1.RegisterAdminServer(s.grpcServer, s)
 
