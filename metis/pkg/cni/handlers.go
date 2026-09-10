@@ -20,15 +20,12 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	"github.com/containernetworking/cni/pkg/types"
 	current "github.com/containernetworking/cni/pkg/types/100"
-	"google.golang.org/grpc/status"
 
 	pb "k8s.io/metis/api/adaptiveipam/v1"
-	"k8s.io/metis/pkg/metrics"
 )
 
 func (p *Plugin) CmdAdd(args *skel.CmdArgs) error {
@@ -40,16 +37,11 @@ func (p *Plugin) CmdAdd(args *skel.CmdArgs) error {
 }
 
 func (p *Plugin) cmdAdd(args *skel.CmdArgs) (result *current.Result, err error) {
-	start := time.Now()
-
 	session, err := p.prepare(args, "ADD")
 	if err != nil {
 		return nil, fmt.Errorf("metis cni add: prepare failed: %w", err)
 	}
 	defer session.close()
-	defer func() {
-		p.recordMetrics("CmdAdd", session, err, start)
-	}()
 
 	if len(session.pluginConf.IPAM.Ranges) == 0 {
 		return nil, fmt.Errorf("metis cni add: no IPAM ranges specified in config")
@@ -114,16 +106,11 @@ func (p *Plugin) CmdDel(args *skel.CmdArgs) error {
 }
 
 func (p *Plugin) cmdDel(args *skel.CmdArgs) (err error) {
-	start := time.Now()
-
 	session, err := p.prepare(args, "DEL")
 	if err != nil {
 		return fmt.Errorf("metis cni delete: prepare failed: %w", err)
 	}
 	defer session.close()
-	defer func() {
-		p.recordMetrics("CmdDel", session, err, start)
-	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
 	defer cancel()
@@ -155,16 +142,11 @@ func (p *Plugin) CmdCheck(args *skel.CmdArgs) error {
 }
 
 func (p *Plugin) cmdCheck(args *skel.CmdArgs) (err error) {
-	start := time.Now()
-
 	session, err := p.prepare(args, "CHECK")
 	if err != nil {
 		return fmt.Errorf("metis cni check: prepare failed: %w", err)
 	}
 	defer session.close()
-	defer func() {
-		p.recordMetrics("CmdCheck", session, err, start)
-	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
 	defer cancel()
@@ -189,30 +171,6 @@ func (p *Plugin) cmdCheck(args *skel.CmdArgs) (err error) {
 
 	session.logger.Info("Successfully checked IP")
 	return nil
-}
-
-func (p *Plugin) recordMetrics(method string, session *pluginSession, err error, start time.Time) {
-	if !p.enableMetrics {
-		return
-	}
-	duration := time.Since(start).Seconds()
-
-	containerID := session.containerID
-	podName := ""
-	if session.k8sArgs != nil {
-		podName = string(session.k8sArgs.K8S_POD_NAME)
-	}
-	network := ""
-	if session.pluginConf != nil {
-		network = session.pluginConf.Name
-	}
-
-	metrics.CNIRequestLatencySeconds.WithLabelValues(method, network, containerID, podName).Observe(duration)
-
-	if err != nil {
-		code := status.Code(err).String()
-		metrics.CNIRequestErrorTotal.WithLabelValues(method, code, network, containerID, podName).Inc()
-	}
 }
 
 func buildIPConfig(ipConfig *pb.PodIP) (*current.IPConfig, net.IP, error) {

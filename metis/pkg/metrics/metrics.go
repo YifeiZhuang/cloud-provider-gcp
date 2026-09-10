@@ -114,25 +114,6 @@ var (
 		},
 		[]string{"operation", "network"},
 	)
-
-	// CNIRequestLatencySeconds measures end-to-end latency of CNI plugin client requests.
-	CNIRequestLatencySeconds = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "metis_cni_request_latency_seconds",
-			Help:    "Latency of CNI client calls to the daemon socket.",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"method", "network", "container_id", "pod_name"},
-	)
-
-	// CNIRequestErrorTotal tracks failures encountered during CNI plugin client requests.
-	CNIRequestErrorTotal = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "metis_cni_request_error_total",
-			Help: "Total count of CNI gRPC request failures.",
-		},
-		[]string{"method", "error_code", "network", "container_id", "pod_name"},
-	)
 )
 
 func init() {

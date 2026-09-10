@@ -78,8 +78,6 @@ func TestMetrics_AllMetricsRegistered(t *testing.T) {
 	metrics.RPCLatencySeconds.WithLabelValues("AllocatePodIP", "default", "c1", "p1").Observe(0.1)
 	metrics.DynamicIPAllocRPCLatencySeconds.WithLabelValues("default", "c1", "p1").Observe(0.5)
 	metrics.WatcherCIDROperationCount.WithLabelValues("add", "default").Inc()
-	metrics.CNIRequestLatencySeconds.WithLabelValues("CmdAdd", "default", "c1", "p1").Observe(0.05)
-	metrics.CNIRequestErrorTotal.WithLabelValues("CmdAdd", "Unknown", "default", "c1", "p1").Inc()
 
 	metricFamilies, err := prometheus.DefaultGatherer.Gather()
 	if err != nil {
@@ -97,8 +95,6 @@ func TestMetrics_AllMetricsRegistered(t *testing.T) {
 		"metis_daemon_rpc_latency_seconds",
 		"metis_daemon_dynamic_ip_alloc_rpc_latency_seconds",
 		"metis_daemon_watcher_cidr_operation_count",
-		"metis_cni_request_latency_seconds",
-		"metis_cni_request_error_total",
 	}
 
 	foundMetrics := map[string]bool{}

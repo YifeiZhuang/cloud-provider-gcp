@@ -17,6 +17,8 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
+
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/metis/pkg"
 	"k8s.io/metis/pkg/daemon"
@@ -57,6 +59,10 @@ func (o *daemonOptions) addFlags() cliflag.NamedFlagSets {
 func (o *daemonOptions) applyTo(cfg *daemon.Config) error {
 	if o == nil || cfg == nil {
 		return nil
+	}
+
+	if o.MetricsPort < 0 || o.MetricsPort > 65535 {
+		return fmt.Errorf("invalid metrics-port %d: must be between 0 and 65535", o.MetricsPort)
 	}
 
 	cfg.MonitorInterval = o.MonitorInterval

@@ -70,13 +70,6 @@ func WithLogFile(path string) Option {
 	}
 }
 
-// WithEnableMetrics sets whether metrics recording is enabled for the CNI plugin.
-func WithEnableMetrics(enable bool) Option {
-	return func(p *Plugin) {
-		p.enableMetrics = enable
-	}
-}
-
 // NewPlugin creates a new Plugin with functional options.
 func NewPlugin(opts ...Option) *Plugin {
 	p := &Plugin{
@@ -84,7 +77,6 @@ func NewPlugin(opts ...Option) *Plugin {
 		socketPath:    pkg.DefaultSockPath,
 		dbPath:        pkg.DefaultDBPath,
 		logFile:       pkg.DefaultCNILogPath,
-		enableMetrics: true,
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -172,7 +164,7 @@ func (p *Plugin) prepare(args *skel.CmdArgs, command string) (*pluginSession, er
 			return nil, fmt.Errorf("metis cni fallback: failed to open store at %s: %w", dbPath, err)
 		}
 
-		engine := daemon.NewIPAMEngine(logger, storeInstance, 0, store.DefaultBusyTimeout, nil, p.enableMetrics)
+		engine := daemon.NewIPAMEngine(logger, storeInstance, 0, store.DefaultBusyTimeout, nil, false)
 		client = &directClientAdapter{engine: engine}
 
 		sessionCleanup = func() {
