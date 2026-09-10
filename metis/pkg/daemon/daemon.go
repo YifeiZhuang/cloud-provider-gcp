@@ -153,7 +153,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		MetricsRecorder:                 recorder,
 	})
 
-	server.engine.SetMonitor(monitorInstance)
+	server.engine.SetScaleUpNotifier(monitorInstance)
 
 	// TODO: Replace with nncInformerFactory.StartWithContext(ctx) once the
 	// gke-networking-api library is updated to generate StartWithContext.

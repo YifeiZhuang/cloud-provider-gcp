@@ -23,6 +23,7 @@ import (
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/metis/pkg"
 	"k8s.io/metis/pkg/daemon"
+	"k8s.io/metis/pkg/ipam"
 )
 
 // daemonOptions holds the metis daemon options.
@@ -46,7 +47,7 @@ func (o *daemonOptions) addFlags() cliflag.NamedFlagSets {
 
 	fs := fss.FlagSet("daemon")
 	fs.DurationVar(&o.MonitorInterval, "monitor-interval", daemon.DefaultMonitorInterval, "Monitor interval (e.g., 5s, 1m). 0 or negative values will be interpreted as the default value.")
-	fs.DurationVar(&o.ReleaseCooldown, "release-cooldown", daemon.DefaultReleaseCooldown, "Release cooldown duration (e.g., 5m). 0 or negative values will be interpreted as the default value.")
+	fs.DurationVar(&o.ReleaseCooldown, "release-cooldown", ipam.DefaultReleaseCooldown, "Release cooldown duration (e.g., 5m). 0 or negative values will be interpreted as the default value.")
 	fs.StringVar(&o.DBPath, "db-path", pkg.DefaultDBPath, "Path to the SQLite database file")
 	fs.StringVar(&o.SocketPath, "socket-path", pkg.DefaultSockPath, "Path to the Unix domain socket")
 	fs.StringVar(&o.BindAddress, "bind-address", "0.0.0.0", "IP address on which to listen for the metrics HTTP server.")

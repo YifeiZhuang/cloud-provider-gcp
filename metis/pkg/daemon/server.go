@@ -30,6 +30,7 @@ import (
 	"k8s.io/metis/api/adaptiveipam/v1"
 	adminv1 "k8s.io/metis/api/admin/v1"
 	"k8s.io/metis/pkg"
+	"k8s.io/metis/pkg/ipam"
 	"k8s.io/metis/pkg/metrics"
 	"k8s.io/metis/pkg/store"
 )
@@ -37,7 +38,7 @@ import (
 type adaptiveIpamServer struct {
 	adaptiveipam.UnimplementedAdaptiveIpamServer
 	adminv1.UnimplementedAdminServer
-	engine     *IPAMEngine
+	engine     *ipam.IPAMEngine
 	store      *store.Store
 	sockPath   string
 	grpcServer *grpc.Server
@@ -49,7 +50,7 @@ func newAdaptiveIpamServer(logger logr.Logger, storeInstance *store.Store, socke
 	if recorder == nil {
 		recorder = metrics.NewNoOpRecorder()
 	}
-	engine := NewIPAMEngine(logger, storeInstance, releaseCooldown, busyTimeout, nil, recorder)
+	engine := ipam.NewIPAMEngine(logger, storeInstance, releaseCooldown, busyTimeout, nil, recorder)
 	return &adaptiveIpamServer{
 		engine:   engine,
 		store:    storeInstance,
@@ -85,11 +86,11 @@ func getContainerIDFromAllocate(req *adaptiveipam.AllocatePodIPRequest) string {
 }
 
 func (s *adaptiveIpamServer) getPendingRequestsCount(network string) int {
-	return s.engine.getPendingRequestsCount(network)
+	return s.engine.GetPendingRequestsCount(network)
 }
 
 func (s *adaptiveIpamServer) onCIDRAdded(network string, availableIPs int) {
-	s.engine.onCIDRAdded(network, availableIPs)
+	s.engine.OnCIDRAdded(network, availableIPs)
 }
 
 func (s *adaptiveIpamServer) start() error {
