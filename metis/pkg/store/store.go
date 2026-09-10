@@ -867,6 +867,9 @@ type NetworkIPUsage struct {
 
 // GetIPUsage fetches IP counts (allocated, cooldown, draining, deleting, active_total, total) and CIDR block counts (ready, draining, deleting) for a specific network and IP family.
 func (s *Store) GetIPUsage(ctx context.Context, network string, ipFamily IPFamily) (NetworkIPUsage, error) {
+	if ipFamily == IPv6 {
+		return s.getIPv6Usage(ctx, network)
+	}
 	var usage NetworkIPUsage
 	nowMilli := time.Now().UTC().UnixMilli()
 	err := s.db.QueryRowContext(ctx, `
@@ -905,6 +908,33 @@ func (s *Store) GetIPUsage(ctx context.Context, network string, ipFamily IPFamil
 		}
 		return NetworkIPUsage{}, fmt.Errorf("failed to query IP usage for network %s: %w", network, err)
 	}
+	return usage, nil
+}
+
+// getIPv6Usage fetches lightweight IPv6 IP counts (allocated, active_total, total) and CIDR block counts (ready) for a specific network.
+// It avoids joining the ip_addresses table as IPv6 does not maintain dynamic allocation or cooldown states.
+func (s *Store) getIPv6Usage(ctx context.Context, network string) (NetworkIPUsage, error) {
+	var usage NetworkIPUsage
+	err := s.db.QueryRowContext(ctx, `
+		SELECT
+			IFNULL(SUM(allocated_ips), 0),
+			IFNULL(SUM(total_ips), 0),
+			IFNULL(SUM(CASE WHEN state = ? THEN 1 ELSE 0 END), 0)
+		FROM cidr_blocks
+		WHERE network = ? AND ip_family = ? AND state != ?
+	`, StateReady, network, IPv6, StateDeleting).Scan(
+		&usage.IPs.Allocated,
+		&usage.IPs.Total,
+		&usage.CIDRs.Ready,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return NetworkIPUsage{}, nil
+		}
+		return NetworkIPUsage{}, fmt.Errorf("failed to query IPv6 IP usage for network %s: %w", network, err)
+	}
+	usage.IPs.ActiveTotal = usage.IPs.Total
 	return usage, nil
 }
 

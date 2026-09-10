@@ -20,8 +20,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	nncv1 "github.com/GoogleCloudPlatform/gke-networking-api/apis/nodenetworkconfig/v1"
@@ -36,7 +38,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"k8s.io/metis/pkg"
-
+	"k8s.io/metis/pkg/metrics"
 	"k8s.io/metis/pkg/store"
 )
 
@@ -44,6 +46,7 @@ import (
 type Config struct {
 	DBPath                          string
 	SocketPath                      string
+	BindAddress                     string
 	MetricsPort                     int
 	MonitorInterval                 time.Duration
 	ReleaseCooldown                 time.Duration
@@ -92,27 +95,13 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	defer storeInstance.Close()
 
-	enableMetrics := d.Config.MetricsPort > 0
-	if enableMetrics {
-		metricsAddr := fmt.Sprintf(":%d", d.Config.MetricsPort)
-		mux := http.NewServeMux()
-		mux.Handle("/metrics", promhttp.Handler())
-		metricsServer := &http.Server{
-			Addr:    metricsAddr,
-			Handler: mux,
-		}
-
-		go func() {
-			logger.Info("Metrics server is listening", "port", d.Config.MetricsPort)
-			if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logger.Error(err, "Metrics server failed")
-			}
-		}()
-
-		defer metricsServer.Close()
+	recorder, stopMetrics, err := startMetricsServer(logger, d.Config.BindAddress, d.Config.MetricsPort)
+	if err != nil {
+		return err
 	}
+	defer stopMetrics()
 
-	server := newAdaptiveIpamServer(logger, storeInstance, d.Config.SocketPath, d.Config.ReleaseCooldown, store.DefaultBusyTimeout, enableMetrics)
+	server := newAdaptiveIpamServer(logger, storeInstance, d.Config.SocketPath, d.Config.ReleaseCooldown, store.DefaultBusyTimeout, recorder)
 
 	if d.NNCClient == nil || d.KubeClient == nil {
 		var err error
@@ -139,13 +128,13 @@ func (d *Daemon) Run(ctx context.Context) error {
 	nncInformer := nncInformerFactory.Networking().V1().NodeNetworkConfigs()
 
 	watcher := NewWatcher(WatcherConfig{
-		Logger:        logger,
-		NNCClient:     d.NNCClient,
-		NNCInformer:   nncInformer,
-		Store:         storeInstance,
-		NodeName:      nodeName,
-		OnCIDRAdded:   server.onCIDRAdded,
-		EnableMetrics: enableMetrics,
+		Logger:          logger,
+		NNCClient:       d.NNCClient,
+		NNCInformer:     nncInformer,
+		Store:           storeInstance,
+		NodeName:        nodeName,
+		OnCIDRAdded:     server.onCIDRAdded,
+		MetricsRecorder: recorder,
 	})
 	monitorInstance := NewMonitor(MonitorConfig{
 		Logger:                          logger,
@@ -161,7 +150,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		LowUtilizationThreshold:         d.Config.LowUtilizationThreshold,
 		TargetUtilizationAfterScaleUp:   d.Config.TargetUtilizationAfterScaleUp,
 		CooldownPushbackThreshold:       d.Config.CooldownPushbackThreshold,
-		EnableMetrics:                   enableMetrics,
+		MetricsRecorder:                 recorder,
 	})
 
 	server.engine.SetMonitor(monitorInstance)
@@ -281,4 +270,44 @@ func getNodeName(logger logr.Logger) (string, error) {
 		return "", fmt.Errorf("failed to get hostname: %w", err)
 	}
 	return hostname, nil
+}
+
+func startMetricsServer(logger logr.Logger, bindAddress string, metricsPort int) (metrics.MetricsRecorder, func(), error) {
+	if metricsPort <= 0 {
+		return metrics.NewNoOpRecorder(), func() {}, nil
+	}
+
+	if bindAddress == "" {
+		bindAddress = "0.0.0.0"
+	}
+	metricsAddr := net.JoinHostPort(bindAddress, strconv.Itoa(metricsPort))
+	listener, err := net.Listen("tcp", metricsAddr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to bind metrics HTTP server on %s: %w", metricsAddr, err)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	metricsServer := &http.Server{
+		Addr:              metricsAddr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	go func() {
+		logger.Info("Metrics server is listening", "address", metricsAddr)
+		if err := metricsServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error(err, "Metrics server failed")
+		}
+	}()
+
+	stopMetrics := func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			logger.Error(err, "Metrics HTTP server graceful shutdown failed")
+		}
+	}
+
+	return metrics.NewPrometheusRecorder(), stopMetrics, nil
 }

@@ -164,7 +164,7 @@ func (p *Plugin) prepare(args *skel.CmdArgs, command string) (*pluginSession, er
 			return nil, fmt.Errorf("metis cni fallback: failed to open store at %s: %w", dbPath, err)
 		}
 
-		engine := daemon.NewIPAMEngine(logger, storeInstance, 0, store.DefaultBusyTimeout, nil, false)
+		engine := daemon.NewIPAMEngine(logger, storeInstance, 0, store.DefaultBusyTimeout, nil, nil)
 		client = &directClientAdapter{engine: engine}
 
 		sessionCleanup = func() {

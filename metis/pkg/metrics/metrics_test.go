@@ -124,6 +124,7 @@ func TestDaemon_MetricsHTTPServer(t *testing.T) {
 		ReleaseCooldown: 1 * time.Minute,
 		DBPath:          dbPath,
 		SocketPath:      sockPath,
+		BindAddress:     "127.0.0.1",
 		MetricsPort:     9997, // Use non-default port for test
 	}
 
@@ -175,4 +176,22 @@ func TestDaemon_MetricsHTTPServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to fetch /metrics with expected content within 3m: %v", err)
 	}
+}
+
+func TestPrometheusRecorder(t *testing.T) {
+	recorder := metrics.NewPrometheusRecorder()
+	recorder.RecordGRPCRequest("AllocatePodIP", "default", "c1", "p1", nil, 100*time.Millisecond)
+	recorder.RecordDynamicAllocation("default", "c1", "p1", 200*time.Millisecond)
+	recorder.RecordMonitorAction("scale_up", "default")
+	recorder.RecordPendingRequests("default", 2)
+	recorder.RecordWatcherCIDROperation("add", "default")
+}
+
+func TestNoOpRecorder(t *testing.T) {
+	recorder := metrics.NewNoOpRecorder()
+	recorder.RecordGRPCRequest("AllocatePodIP", "default", "c1", "p1", nil, 100*time.Millisecond)
+	recorder.RecordDynamicAllocation("default", "c1", "p1", 200*time.Millisecond)
+	recorder.RecordMonitorAction("scale_up", "default")
+	recorder.RecordPendingRequests("default", 2)
+	recorder.RecordWatcherCIDROperation("add", "default")
 }

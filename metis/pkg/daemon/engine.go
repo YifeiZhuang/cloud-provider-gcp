@@ -60,14 +60,17 @@ type IPAMEngine struct {
 	// to optimize lookups and avoid iterating over all waiting clients from other networks.
 	// The inner map associates each blocked cniClient to a channel that is closed to wake
 	// it up when new IPs become available.
-	requestsMap   map[string]map[cniClient]chan struct{}
-	requestsMu    sync.RWMutex
-	monitor       *Monitor
-	enableMetrics bool
+	requestsMap map[string]map[cniClient]chan struct{}
+	requestsMu  sync.RWMutex
+	monitor     *Monitor
+	recorder    metrics.MetricsRecorder
 }
 
 // NewIPAMEngine constructs a new IPAMEngine instance.
-func NewIPAMEngine(logger logr.Logger, storeInstance *store.Store, releaseCooldown time.Duration, busyTimeout time.Duration, monitor *Monitor, enableMetrics bool) *IPAMEngine {
+func NewIPAMEngine(logger logr.Logger, storeInstance *store.Store, releaseCooldown time.Duration, busyTimeout time.Duration, monitor *Monitor, recorder metrics.MetricsRecorder) *IPAMEngine {
+	if recorder == nil {
+		recorder = metrics.NewNoOpRecorder()
+	}
 	return &IPAMEngine{
 		store:           storeInstance,
 		releaseCooldown: releaseCooldown,
@@ -75,7 +78,7 @@ func NewIPAMEngine(logger logr.Logger, storeInstance *store.Store, releaseCooldo
 		logger:          logger,
 		requestsMap:     map[string]map[cniClient]chan struct{}{},
 		monitor:         monitor,
-		enableMetrics:   enableMetrics,
+		recorder:        recorder,
 	}
 }
 
@@ -231,13 +234,10 @@ func newCNIClient(req *adaptiveipam.AllocatePodIPRequest) cniClient {
 func (e *IPAMEngine) handleDynamicAllocation(ctx context.Context, req *adaptiveipam.AllocatePodIPRequest) error {
 	clientKey := newCNIClient(req)
 
-	if e.enableMetrics {
-		metrics.OutgoingDynamicIPAllocRequestTotal.WithLabelValues(clientKey.network, clientKey.containerID, clientKey.podName).Inc()
-		startDynamic := time.Now()
-		defer func() {
-			metrics.DynamicIPAllocRPCLatencySeconds.WithLabelValues(clientKey.network, clientKey.containerID, clientKey.podName).Observe(time.Since(startDynamic).Seconds())
-		}()
-	}
+	startDynamic := time.Now()
+	defer func() {
+		e.recorder.RecordDynamicAllocation(clientKey.network, clientKey.containerID, clientKey.podName, time.Since(startDynamic))
+	}()
 
 	if e.monitor == nil {
 		e.logger.V(2).Info("No monitor available, failing fast on exhaustion", "network", req.Network)

@@ -1799,12 +1799,9 @@ func TestStore_GetIPUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetIPUsage IPv6 failed: %v", err)
 	}
-	// Expected: Allocated: 2, Cooldown: 1, ActiveTotal: 512, Total: 512 (256 + 256), Draining: 256, Deleting: 0, ReadyCIDRs: 1, DrainingCIDRs: 1, DeletingCIDRs: 0
+	// Lightweight IPv6 usage returns Allocated: 2, ActiveTotal: 512, Total: 512, ReadyCIDRs: 1
 	if ipv6Usage.IPs.Allocated != 2 {
 		t.Errorf("Expected IPv6 Allocated to be 2, got %d", ipv6Usage.IPs.Allocated)
-	}
-	if ipv6Usage.IPs.Cooldown != 1 {
-		t.Errorf("Expected IPv6 Cooldown to be 1, got %d", ipv6Usage.IPs.Cooldown)
 	}
 	if ipv6Usage.IPs.ActiveTotal != 512 {
 		t.Errorf("Expected IPv6 ActiveTotal to be 512, got %d", ipv6Usage.IPs.ActiveTotal)
@@ -1812,17 +1809,8 @@ func TestStore_GetIPUsage(t *testing.T) {
 	if ipv6Usage.IPs.Total != 512 {
 		t.Errorf("Expected IPv6 Total to be 512, got %d", ipv6Usage.IPs.Total)
 	}
-	if ipv6Usage.IPs.Draining != 256 {
-		t.Errorf("Expected IPv6 Draining to be 256, got %d", ipv6Usage.IPs.Draining)
-	}
 	if ipv6Usage.CIDRs.Ready != 1 {
 		t.Errorf("Expected IPv6 ReadyCIDRs to be 1, got %d", ipv6Usage.CIDRs.Ready)
-	}
-	if ipv6Usage.CIDRs.Draining != 1 {
-		t.Errorf("Expected IPv6 DrainingCIDRs to be 1, got %d", ipv6Usage.CIDRs.Draining)
-	}
-	if ipv6Usage.CIDRs.Deleting != 0 {
-		t.Errorf("Expected IPv6 DeletingCIDRs to be 0, got %d", ipv6Usage.CIDRs.Deleting)
 	}
 
 	// 7. Test UndrainOneCIDRBlock

@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"strings"
 	"time"
 
 	nncv1 "github.com/GoogleCloudPlatform/gke-networking-api/apis/nodenetworkconfig/v1"
@@ -130,7 +129,7 @@ type Monitor struct {
 	// sustainedLowUtilizationDuration is the duration utilization must remain low before triggering a drain.
 	sustainedLowUtilizationDuration time.Duration
 
-	EnableMetrics bool
+	recorder metrics.MetricsRecorder
 }
 
 // MonitorConfig holds the configuration for the Monitor.
@@ -148,7 +147,7 @@ type MonitorConfig struct {
 	LowUtilizationThreshold         float64
 	TargetUtilizationAfterScaleUp   float64
 	CooldownPushbackThreshold       int
-	EnableMetrics                   bool
+	MetricsRecorder                 metrics.MetricsRecorder
 	// RateLimiter is optional and primarily used to override the queue's rate limiter for testing.
 	RateLimiter workqueue.TypedRateLimiter[string]
 }
@@ -200,6 +199,11 @@ func NewMonitor(cfg MonitorConfig) *Monitor {
 		nncSynced = cfg.NNCInformer.Informer().HasSynced
 	}
 
+	recorder := cfg.MetricsRecorder
+	if recorder == nil {
+		recorder = metrics.NewNoOpRecorder()
+	}
+
 	return &Monitor{
 		queue:                           queue,
 		nncClient:                       cfg.NNCClient,
@@ -217,7 +221,7 @@ func NewMonitor(cfg MonitorConfig) *Monitor {
 		targetUtilizationAfterScaleUp:   cfg.TargetUtilizationAfterScaleUp,
 		cooldownPushbackThreshold:       cfg.CooldownPushbackThreshold,
 		sustainedLowUtilizationDuration: cfg.SustainedLowUtilizationDuration,
-		EnableMetrics:                   cfg.EnableMetrics,
+		recorder:                        recorder,
 	}
 }
 
@@ -347,9 +351,7 @@ func (m *Monitor) syncAll(ctx context.Context) error {
 		// Scale-Down (Draining): Mark excess CIDR blocks as draining if utilization is low.
 		if m.maybeDrainExcessive(ctx, network, info) {
 			m.logger.Info("Scale-down triggered: one or more blocks are marked for draining", "network", network)
-			if m.EnableMetrics {
-				metrics.MonitorActionCount.WithLabelValues("drain_excessive", network).Inc()
-			}
+			m.recorder.RecordMonitorAction("drain_excessive", network)
 		}
 
 		// Releasing: Reconcile CIDRs that are deleting/releasing. This returns the updated
@@ -458,21 +460,17 @@ func (m *Monitor) getUtilizationInfo(ctx context.Context, network string, nncCop
 	// Note that this includes CIDR blocks in Draining status in both used and total counts.
 	// This ensures that processing prefetch (dynamic allocation) is not interfered with
 	// (triggered unnecessarily) while we are trying to remove excessive capacity by draining blocks.
-	families := []store.IPFamily{store.IPv4, store.IPv6}
-	var v4Usage store.NetworkIPUsage
-	for _, family := range families {
-		usage, err := m.store.GetIPUsage(ctx, network, family)
-		if err != nil {
-			if family == store.IPv4 {
-				return nil, fmt.Errorf("failed to query IP usage: %w", err)
-			}
-			m.logger.Error(err, "failed to get IP usage for metrics", "network", network, "ipFamily", family)
-			continue
-		}
-		m.emitLocalStoreIPAndCIDRMetrics(ctx, network, family, usage)
-		if family == store.IPv4 {
-			v4Usage = usage
-		}
+	v4Usage, err := m.store.GetIPUsage(ctx, network, store.IPv4)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query IP usage: %w", err)
+	}
+	m.emitLocalStoreIPAndCIDRMetrics(ctx, network, store.IPv4, v4Usage)
+
+	v6Usage, err := m.store.GetIPUsage(ctx, network, store.IPv6)
+	if err != nil {
+		m.logger.V(4).Info("failed to get IPv6 IP usage for metrics", "network", network, "error", err)
+	} else if v6Usage.IPs.Total > 0 {
+		m.emitLocalStoreIPAndCIDRMetrics(ctx, network, store.IPv6, v6Usage)
 	}
 
 	var currentReleasables []nncv1.PodCIDR
@@ -496,9 +494,7 @@ func (m *Monitor) getUtilizationInfo(ctx context.Context, network string, nncCop
 		pendingRequests = m.GetPendingRequestsCount(network)
 	}
 
-	if m.EnableMetrics {
-		metrics.PendingDynamicRequestGauge.WithLabelValues(network).Set(float64(pendingRequests))
-	}
+	m.recorder.RecordPendingRequests(network, pendingRequests)
 
 	utilization := m.calculateUtilization(usedIPs, pendingRequests, v4Usage.IPs.ActiveTotal)
 
@@ -541,9 +537,7 @@ func (m *Monitor) maybeScaleUp(network string, info *UtilizationInfo) int {
 	desiredPods := max(newPods, currentPods)
 	if desiredPods > currentPods {
 		m.logger.Info("Scale-up triggered: capacity expansion requested", "network", network, "currentPods", currentPods, "desiredPods", desiredPods)
-		if m.EnableMetrics {
-			metrics.MonitorActionCount.WithLabelValues("scale_up", network).Inc()
-		}
+		m.recorder.RecordMonitorAction("scale_up", network)
 	}
 	return desiredPods
 }
@@ -658,9 +652,7 @@ func (m *Monitor) reconcileDeletingBlocks(
 				return nil, 0, fmt.Errorf("failed to delete released CIDR block %d from store: %w", block.ID, err)
 			}
 			m.logger.Info("Deleted CIDR block from local DB as it was released by GCE (reconciliation)", "cidrBlockID", block.ID, "cidr", block.CIDR, "network", network)
-			if m.EnableMetrics {
-				metrics.MonitorActionCount.WithLabelValues("delete", network).Inc()
-			}
+			m.recorder.RecordMonitorAction("delete", network)
 		} else {
 			// Case B: Still in CR status -> keep it in ReleasableCIDRs
 			newReleasables = append(newReleasables, podCIDR)
@@ -670,9 +662,7 @@ func (m *Monitor) reconcileDeletingBlocks(
 				m.logger.Info("CIDR block is fully drained; requesting release by adding to releasableCIDRs list", "network", network, "cidr", block.CIDR, "totalIPs", block.TotalIPs)
 				reducePods += block.TotalIPs
 				releasableMap[block.CIDR] = true
-				if m.EnableMetrics {
-					metrics.MonitorActionCount.WithLabelValues("release", network).Inc()
-				}
+				m.recorder.RecordMonitorAction("release", network)
 			}
 		}
 	}
@@ -696,20 +686,5 @@ func getAllocationForNetwork(nnc *nncv1.NodeNetworkConfig, network string) *nncv
 }
 
 func (m *Monitor) emitLocalStoreIPAndCIDRMetrics(_ context.Context, network string, family store.IPFamily, usage store.NetworkIPUsage) {
-	if !m.EnableMetrics {
-		return
-	}
-	familyStr := strings.ToLower(string(family))
-	available := max(0, usage.IPs.ActiveTotal-(usage.IPs.Allocated+usage.IPs.Cooldown))
-
-	metrics.LocalStoreIPTotalGauge.WithLabelValues(network, familyStr, "allocated").Set(float64(usage.IPs.Allocated))
-	metrics.LocalStoreIPTotalGauge.WithLabelValues(network, familyStr, "cooldown").Set(float64(usage.IPs.Cooldown))
-	metrics.LocalStoreIPTotalGauge.WithLabelValues(network, familyStr, "draining").Set(float64(usage.IPs.Draining))
-	metrics.LocalStoreIPTotalGauge.WithLabelValues(network, familyStr, "deleting").Set(float64(usage.IPs.Deleting))
-	metrics.LocalStoreIPTotalGauge.WithLabelValues(network, familyStr, "available").Set(float64(available))
-	metrics.LocalStoreIPTotalGauge.WithLabelValues(network, familyStr, "total").Set(float64(usage.IPs.Total))
-
-	metrics.LocalStoreCIDRBlockTotalGauge.WithLabelValues(network, familyStr, "ready").Set(float64(usage.CIDRs.Ready))
-	metrics.LocalStoreCIDRBlockTotalGauge.WithLabelValues(network, familyStr, "draining").Set(float64(usage.CIDRs.Draining))
-	metrics.LocalStoreCIDRBlockTotalGauge.WithLabelValues(network, familyStr, "deleting").Set(float64(usage.CIDRs.Deleting))
+	m.recorder.RecordStoreUsage(network, family, usage)
 }
