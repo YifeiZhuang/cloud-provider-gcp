@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	fakedynamic "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/informers"
@@ -202,8 +203,13 @@ func TestStartController_CloudClientRetry(t *testing.T) {
 			defer close(stopCh)
 			mainInformerFactory.Start(stopCh)
 
+			uMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pc)
+			assert.NoError(t, err)
+			u := &unstructured.Unstructured{Object: uMap}
+			u.SetGroupVersionKind(v1.SchemeGroupVersion.WithKind("ProviderConfig"))
+
 			// Start the controller asynchronously
-			runStopCh, err := starter.StartController(pc)
+			runStopCh, err := starter.StartController(u)
 			assert.NoError(t, err)
 			defer close(runStopCh)
 

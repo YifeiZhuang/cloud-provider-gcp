@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GoogleCloudPlatform/gke-enterprise-mt/pkg/filtered"
+	"github.com/GoogleCloudPlatform/gke-enterprise-mt/pkg/filteredinformer"
 	networkinformers "github.com/GoogleCloudPlatform/gke-networking-api/client/network/informers/externalversions"
 	network "github.com/GoogleCloudPlatform/gke-networking-api/client/network/informers/externalversions/network"
 	networkv1 "github.com/GoogleCloudPlatform/gke-networking-api/client/network/informers/externalversions/network/v1"
@@ -209,7 +209,7 @@ func (f *localFilteredInformer) FilterFunc(obj interface{}) bool {
 		return false
 	}
 	val, ok := accessor.GetLabels()[f.filterKey]
-	return filtered.MatchValue(val, ok, f.filterValue, f.allowMissing)
+	return filteredinformer.MatchValue(val, ok, f.filterValue, f.allowMissing)
 }
 
 func (f *localFilteredInformer) GetStore() cache.Store {
@@ -301,7 +301,7 @@ func isObjectMatchingValue(obj interface{}, filterKey, filterValue string, allow
 		return false
 	}
 	val, ok := metaObj.GetLabels()[filterKey]
-	return filtered.MatchValue(val, ok, filterValue, allowMissing)
+	return filteredinformer.MatchValue(val, ok, filterValue, allowMissing)
 }
 
 func getFilteredListByValue(items []interface{}, filterKey, filterValue string, allowMissing bool) []interface{} {

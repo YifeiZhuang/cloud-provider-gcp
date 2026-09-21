@@ -126,7 +126,7 @@ func TestGetClusterCIDRsFromProviderConfig(t *testing.T) {
 					NetworkConfig: v1.ProviderNetworkConfig{
 						SubnetInfo: v1.ProviderConfigSubnetInfo{
 							PodRanges: []v1.ProviderConfigSecondaryRange{
-								{CIDR: "10.100.0.0/16"},
+								{Range: v1.Range{CIDR: "10.100.0.0/16"}},
 							},
 						},
 					},
@@ -141,8 +141,8 @@ func TestGetClusterCIDRsFromProviderConfig(t *testing.T) {
 					NetworkConfig: v1.ProviderNetworkConfig{
 						SubnetInfo: v1.ProviderConfigSubnetInfo{
 							PodRanges: []v1.ProviderConfigSecondaryRange{
-								{CIDR: "10.100.0.0/16"},
-								{CIDR: "fd00::/64"},
+								{Range: v1.Range{CIDR: "10.100.0.0/16"}},
+								{Range: v1.Range{CIDR: "fd00::/64"}},
 							},
 						},
 					},

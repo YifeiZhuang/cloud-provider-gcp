@@ -6,12 +6,15 @@ package gketenantcontrollers
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 
 	v1 "github.com/GoogleCloudPlatform/gke-enterprise-mt/pkg/apis/providerconfig/v1"
-	"github.com/GoogleCloudPlatform/gke-enterprise-mt/pkg/filtered"
+	"github.com/GoogleCloudPlatform/gke-enterprise-mt/pkg/filteredinformer"
+	providerconfigcr "github.com/GoogleCloudPlatform/gke-enterprise-mt/pkg/providerconfigcr"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
@@ -110,9 +113,13 @@ func (s *ControllersStarter) ControllerNames() []string {
 	return names
 }
 
-// StartController starts a map of new scoped controllers for the given ProviderConfig.
+// StartController starts a map of new scoped controllers for the given ProviderConfig unstructured object.
 // It returns a release channel that can be closed to stop the controller.
-func (s *ControllersStarter) StartController(pc *v1.ProviderConfig) (chan<- struct{}, error) {
+func (s *ControllersStarter) StartController(u *unstructured.Unstructured) (chan<- struct{}, error) {
+	pc, err := providerconfigcr.NewProviderConfig(u)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse ProviderConfig from unstructured: %w", err)
+	}
 	pcKey := pc.Name
 	stopCh := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -122,7 +129,7 @@ func (s *ControllersStarter) StartController(pc *v1.ProviderConfig) (chan<- stru
 	}()
 
 	klog.Infof("[%s] Attempting to start scoped controller", pcKey)
-	var filteredFactory *filtered.FilteredSharedInformerFactory
+	var filteredFactory *filteredinformer.FilteredSharedInformerFactory
 
 	// Initialize asynchronously to avoid blocking the framework's event loop.
 	go func() {
@@ -166,7 +173,7 @@ func (s *ControllersStarter) StartController(pc *v1.ProviderConfig) (chan<- stru
 		klog.V(2).Infof("[%s] Creating filtered informer factory...", pcKey)
 		// allow nodes with missing label if this is the supervisor controller
 		allowMissing := utils.IsSupervisor(pc)
-		filteredFactory = filtered.NewFilteredSharedInformerFactory(s.mainInformerFactory, providerConfigLabelKey, pcKey, allowMissing)
+		filteredFactory = filteredinformer.NewFilteredSharedInformerFactory(s.mainInformerFactory, providerConfigLabelKey, pcKey, allowMissing)
 
 		if informerUserCloud, ok := scopedCloud.(cloudprovider.InformerUser); ok {
 			klog.Infof("[%s] Setting up informers for scoped cloud", pcKey)
